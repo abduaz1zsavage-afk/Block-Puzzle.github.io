@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Block Puzzle</title>
+<style>
+:root{
+  --bg1:#1a1c2e; --bg2:#242642; --panel:#242642; --cell:#2d3050; --border:#3a3d63;
+  --accent:#7c5cff; --accent2:#ff5c8a; --text:#f0f0f8; --sub:#9a9dc4;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  display:flex; flex-direction:column; align-items:center;
+  padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px);
+  min-height:100%; touch-action:none; position:relative; overflow-x:hidden;
+  background:linear-gradient(135deg,var(--bg1),var(--bg2)); background-size:220% 220%;
+  animation:bgPan 20s ease infinite;
+}
+@keyframes bgPan{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+#particles{position:fixed; inset:0; overflow:hidden; pointer-events:none; z-index:0;}
+.particle{position:absolute; bottom:-10vh; opacity:0; animation:floatUp linear infinite; user-select:none;}
+@keyframes floatUp{0%{transform:translateY(0) translateX(0) rotate(0deg); opacity:0;}8%{opacity:.85;}92%{opacity:.85;}100%{transform:translateY(-120vh) translateX(24px) rotate(30deg); opacity:0;}}
+.topbar,.sub,.scores,#board,#tools,#tray,#msg,#restart,#overlay{position:relative; z-index:1;}
+.topbar{width:min(92vw,380px); display:flex; justify-content:space-between; align-items:center; margin-top:14px;}
+h1{font-size:1.3rem; margin:0; letter-spacing:.5px;}
+#gear{background:var(--panel); border:1px solid var(--border); border-radius:10px; width:38px; height:38px; font-size:1.1rem; cursor:pointer; color:var(--text);}
+.sub{color:var(--sub); font-size:.82rem; margin:6px 0 10px; text-align:center;}
+.scores{display:flex; gap:24px; margin-bottom:12px;}
+.scorebox{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:8px 18px; text-align:center; transition:background .3s,border-color .3s;}
+.scorebox .n{font-size:1.4rem; font-weight:700; color:var(--accent);}
+.scorebox .l{font-size:.7rem; color:var(--sub); text-transform:uppercase; letter-spacing:1px;}
+#board{
+  display:grid; grid-template-columns:repeat(8,1fr); gap:4px;
+  background:var(--panel); padding:8px; border-radius:14px; border:1px solid var(--border);
+  width:min(92vw,380px); aspect-ratio:1/1; transition:background .3s,border-color .3s,filter .6s ease;
+}
+#board.gameover{ filter:grayscale(1) brightness(.55); }
+#board.shake{ animation:shake .5s; }
+@keyframes shake{10%,90%{transform:translateX(-2px);}20%,80%{transform:translateX(4px);}30%,50%,70%{transform:translateX(-8px);}40%,60%{transform:translateX(8px);}}
+.cell{background-color:var(--cell); border-radius:5px; transition:background-color .3s,transform .15s,opacity .25s; cursor:pointer;}
+.cell.filled{ box-shadow:inset 0 0 0 2px rgba(255,255,255,.15); background-size:11px 11px; }
+body.tex-dots .cell.filled{
+  background-image:
+    radial-gradient(circle at 28% 28%, rgba(255,255,255,.35) 0 2.5px, transparent 3px),
+    radial-gradient(circle at 68% 62%, rgba(0,0,0,.18) 0 2.5px, transparent 3px);
+}
+body.tex-check .cell.filled{
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.18) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.18) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.18) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.18) 75%);
+  background-position:0 0, 6px 6px; background-size:12px 12px;
+}
+.cell.pop{animation:popIn .22s cubic-bezier(.34,1.56,.64,1);}
+.cell.clearing{animation:flashOut .32s ease-in forwards;}
+@keyframes popIn{0%{transform:scale(.35);opacity:.4;}60%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
+@keyframes flashOut{0%{filter:brightness(1);transform:scale(1);}40%{filter:brightness(2.2);transform:scale(1.08);}100%{filter:brightness(2.2);transform:scale(.2);opacity:0;}}
+.cell.preview{outline:2px dashed var(--accent);}
+.cell.bad{outline:2px dashed var(--accent2);}
+#tools{display:flex; gap:10px; margin-top:14px;}
+.tool{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:8px 12px; text-align:center; cursor:pointer; user-select:none; min-width:56px; transition:transform .12s, background .3s, border-color .3s;}
+.tool:active{transform:scale(.92);}
+.tool.active{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset;}
+.tool.disabled{opacity:.35; cursor:default;}
+.tool .ic{font-size:1.2rem;}
+.tool .ct{font-size:.7rem; color:var(--sub); margin-top:2px;}
+#tray{display:flex; gap:14px; margin-top:16px; min-height:90px; align-items:center; justify-content:center; flex-wrap:wrap; transition:opacity .4s;}
+#tray.gameover{ opacity:.35; pointer-events:none; }
+.piece{display:grid; gap:3px; padding:8px; background:var(--panel); border:2px solid var(--border); border-radius:10px; cursor:pointer; transition:transform .15s, background .3s, border-color .3s;}
+.piece:active{transform:scale(1.08);}
+.piece.used{visibility:hidden;}
+.piece.dragging{opacity:0;}
+.piece.selected{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset;}
+.piece .pc{width:16px; height:16px; border-radius:3px; transition:background-color .3s;}
+.piece .pc.on{ background-color:var(--pcolor,var(--accent)); background-size:7px 7px; }
+body.tex-dots .piece .pc.on{
+  background-image:
+    radial-gradient(circle at 28% 28%, rgba(255,255,255,.35) 0 1.6px, transparent 2px),
+    radial-gradient(circle at 68% 62%, rgba(0,0,0,.18) 0 1.6px, transparent 2px);
+}
+body.tex-check .piece .pc.on{
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.2) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.2) 75%);
+  background-position:0 0, 3.5px 3.5px; background-size:7px 7px;
+}
+.piece .pc.off{background:transparent;}
+.drag-clone{position:fixed; top:0; left:0; display:grid; gap:3px; padding:8px; background:var(--panel);
+  border:2px solid var(--accent); border-radius:10px; box-shadow:0 10px 26px rgba(0,0,0,.4);
+  transform:scale(1.15); pointer-events:none; z-index:100;}
+.drag-clone .pc{width:16px; height:16px; border-radius:3px;}
+.drag-clone .pc.on{ background-color:var(--pcolor,var(--accent)); background-size:7px 7px; }
+body.tex-dots .drag-clone .pc.on{
+  background-image:
+    radial-gradient(circle at 28% 28%, rgba(255,255,255,.35) 0 1.6px, transparent 2px),
+    radial-gradient(circle at 68% 62%, rgba(0,0,0,.18) 0 1.6px, transparent 2px);
+}
+body.tex-check .drag-clone .pc.on{
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.2) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.2) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.2) 75%);
+  background-position:0 0, 3.5px 3.5px; background-size:7px 7px;
+}
+.drag-clone .pc.off{background:transparent;}
+#msg{margin-top:12px; font-size:.9rem; color:var(--sub); min-height:20px; text-align:center;}
+#restart{margin-top:8px; background:var(--accent); color:#fff; border:none; padding:8px 18px; border-radius:20px; font-size:.85rem; cursor:pointer; display:none;}
+#overlay{position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:flex-end; justify-content:center; z-index:50;}
+#overlay.open{display:flex;}
+#panel{background:var(--panel); border:1px solid var(--border); border-radius:18px 18px 0 0; width:min(92vw,420px); padding:18px; padding-bottom:calc(18px + env(safe-area-inset-bottom,0px)); transform:translateY(100%); transition:transform .28s ease; max-height:80vh; overflow-y:auto;}
+#overlay.open #panel{transform:translateY(0);}
+#panel h2{margin:14px 0 10px; font-size:1rem;}
+#panel h2:first-child{margin-top:0;}
+.theme-row{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px;}
+.theme-card{border:2px solid var(--border); border-radius:12px; padding:8px; width:84px; cursor:pointer; text-align:center;}
+.theme-card.active{border-color:var(--accent);}
+.theme-preview{display:flex; gap:3px; justify-content:center; margin-bottom:6px; font-size:14px;}
+.theme-preview span.sw{width:14px; height:14px; border-radius:3px; display:inline-block;}
+.theme-card .tname{font-size:.7rem; color:var(--sub);}
+#closePanel{margin-top:10px; width:100%; background:var(--cell); color:var(--text); border:none; border-radius:10px; padding:10px; cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="particles"></div>
+<div class="topbar">
+  <h1>🧱 Block Puzzle</h1>
+  <button id="gear">⚙️</button>
+</div>
+<div class="sub">Тащи фигуру мышкой, или кликни на фигуру и затем на клетку.</div>
+<div class="scores">
+  <div class="scorebox"><div class="n" id="score">0</div><div class="l">Очки</div></div>
+  <div class="scorebox"><div class="n" id="best">0</div><div class="l">Рекорд</div></div>
+</div>
+<div id="board"></div>
+<div id="tools"></div>
+<div id="tray"></div>
+<div id="msg"></div>
+<button id="restart">Играть снова</button>
+
+<div id="overlay">
+  <div id="panel">
+    <h2>Фон</h2>
+    <div class="theme-row" id="fieldRow"></div>
+    <h2>Тема блоков</h2>
+    <div class="theme-row" id="blockRow"></div>
+    <button id="closePanel">Готово</button>
+  </div>
+</div>
+
+<script>
+const SIZE = 8;
+const SHAPES = [
+  [[1]], [[1,1]], [[1],[1]], [[1,1,1]], [[1],[1],[1]],
+  [[1,1],[1,1]], [[1,1,1],[1,0,0]], [[1,1,1],[0,0,1]],
+  [[1,0],[1,0],[1,1]], [[0,1],[0,1],[1,1]],
+  [[1,1,1,1]], [[1],[1],[1],[1]],
+  [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]],
+  [[1,1,1],[0,1,0]],
+  [[1,1,1],[1,1,1],[1,1,1]]
+];
+
+const FIELD_THEMES = [
+  {name:'Планеты', bg1:'#0b0f2e', bg2:'#1b1f4b', panel:'#1c2150', cell:'#262b63', border:'#333a7c', accent:'#7c5cff', accent2:'#5ca9ff', text:'#f0f0f8', sub:'#9a9dc4', particles:['⭐','✨','🪐','🌙']},
+  {name:'Природа', bg1:'#0f2417', bg2:'#1a3d25', panel:'#1c3a26', cell:'#254a30', border:'#316039', accent:'#4ade80', accent2:'#facc15', text:'#eafff2', sub:'#8fc9a3', particles:['🍃','🌿','🍀']},
+  {name:'Любовь', bg1:'#3a0f28', bg2:'#5c1440', panel:'#4a1836', cell:'#5c2044', border:'#742a56', accent:'#ff5c8a', accent2:'#ffb84c', text:'#fff0f6', sub:'#e3a8c4', particles:['💗','💕','💖']},
+  {name:'Аниме', bg1:'#2b0f3a', bg2:'#4a1a5c', panel:'#3a1a4a', cell:'#4a2360', border:'#5e2e78', accent:'#ff5cd6', accent2:'#5ca9ff', text:'#fdf0ff', sub:'#c9a8e3', particles:['🌸','✨','🌸']},
+  {name:'Кино', bg1:'#161616', bg2:'#2a2a2a', panel:'#222222', cell:'#2e2e2e', border:'#3d3d3d', accent:'#ffd166', accent2:'#ff5c8a', text:'#f5f5f5', sub:'#a3a3a3', particles:['🎬','🎞️','⭐']},
+  {name:'Жизнь', bg1:'#2b1f0f', bg2:'#4a3517', panel:'#3a2b17', cell:'#4a381f', border:'#5c4728', accent:'#ffb84c', accent2:'#4ade80', text:'#fff7e6', sub:'#d9bd8f', particles:['🎈','🌈','✨']},
+  {name:'Океан', bg1:'#042c3b', bg2:'#0a4a5e', panel:'#0e3a4d', cell:'#154a60', border:'#1e5f78', accent:'#38bdf8', accent2:'#2dd4bf', text:'#eafcff', sub:'#8fc6d6', particles:['🐠','🌊','🐚']},
+  {name:'Осень', bg1:'#2e1608', bg2:'#4a2a10', panel:'#3a2010', cell:'#4a2c16', border:'#5e3a1e', accent:'#ff7849', accent2:'#ffb84c', text:'#fff3e6', sub:'#d9a679', particles:['🍁','🍂','🌰']},
+  {name:'Зима', bg1:'#0d1f33', bg2:'#1a3450', panel:'#16293f', cell:'#1f3a54', border:'#2b4d6b', accent:'#7dd3fc', accent2:'#e0f2fe', text:'#f0faff', sub:'#9cc5e0', particles:['❄️','⛄','✨']},
+  {name:'Ретро', bg1:'#1a0e2e', bg2:'#3a1a5c', panel:'#2a144a', cell:'#3a1c60', border:'#4e2678', accent:'#ff2ea6', accent2:'#00e5ff', text:'#fdf0ff', sub:'#c9a8e3', particles:['👾','🕹️','⭐']},
+];
+const BLOCK_THEMES = [
+  {name:'Неон', colors:['#7c5cff','#ff5c8a','#34d4c0','#ffb84c','#5ca9ff'], tex:'dots'},
+  {name:'Радуга', colors:['#ff4d4d','#ffb84c','#ffe14d','#4ddb6a','#4d9fff'], tex:'check'},
+  {name:'Ягоды', colors:['#ff5c8a','#c44dff','#ff85c0','#8a4dff','#ff7fa0'], tex:'dots'},
+  {name:'Мятная', colors:['#2dd4bf','#5eead4','#34d399','#22d3ee','#a7f3d0'], tex:'check'},
+  {name:'Огонь', colors:['#ff7849','#ff4e4e','#ffb347','#ff2e6d','#ffd166'], tex:'dots'},
+  {name:'Пастель', colors:['#ffb6c1','#b6e3ff','#c8f5c8','#ffe4a1','#d8b6ff'], tex:'check'},
+  {name:'Металлик', colors:['#94a3b8','#cbd5e1','#64748b','#e2e8f0','#475569'], tex:'dots'},
+  {name:'Шоколад', colors:['#7b4a2d','#a5683f','#c48b3a','#5c3820','#d4a373'], tex:'check'},
+];
+let fieldIdx = 0, blockIdx = 0;
+
+function applyFieldTheme(){
+  const t = FIELD_THEMES[fieldIdx];
+  const r = document.documentElement.style;
+  r.setProperty('--bg1',t.bg1); r.setProperty('--bg2',t.bg2); r.setProperty('--panel',t.panel);
+  r.setProperty('--cell',t.cell); r.setProperty('--border',t.border); r.setProperty('--accent',t.accent);
+  r.setProperty('--accent2',t.accent2); r.setProperty('--text',t.text); r.setProperty('--sub',t.sub);
+  buildParticles(t.particles);
+}
+function buildParticles(list){
+  const box = document.getElementById('particles');
+  box.innerHTML='';
+  for(let i=0;i<16;i++){
+    const s = document.createElement('span');
+    s.className='particle';
+    s.textContent = list[Math.floor(Math.random()*list.length)];
+    const size = 14 + Math.random()*16;
+    const dur = 10 + Math.random()*12;
+    const delay = -Math.random()*dur;
+    s.style.left = (Math.random()*98)+'vw';
+    s.style.fontSize = size+'px';
+    s.style.animationDuration = dur+'s';
+    s.style.animationDelay = delay+'s';
+    box.appendChild(s);
+  }
+}
+function applyBlockTheme(){
+  document.body.classList.remove('tex-dots','tex-check');
+  document.body.classList.add('tex-'+BLOCK_THEMES[blockIdx].tex);
+}
+function COLORS(){ return BLOCK_THEMES[blockIdx].colors; }
+
+let grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+let score = 0, best = 0;
+let tray = [];
+let dragPiece = null, dragEl = null;
+let selectedIdx = null;
+let charges = {bomb:1, row:1, col:1, shuffle:1};
+let activeTool = null;
+let isOver = false;
+
+const boardEl = document.getElementById('board');
+const trayEl = document.getElementById('tray');
+const toolsEl = document.getElementById('tools');
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+const msgEl = document.getElementById('msg');
+const restartBtn = document.getElementById('restart');
+const overlay = document.getElementById('overlay');
+const fieldRow = document.getElementById('fieldRow');
+const blockRow = document.getElementById('blockRow');
+
+document.getElementById('gear').addEventListener('click', ()=>{ renderPanel(); overlay.classList.add('open'); });
+document.getElementById('closePanel').addEventListener('click', ()=> overlay.classList.remove('open'));
+overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.classList.remove('open'); });
+
+function renderPanel(){
+  fieldRow.innerHTML=''; blockRow.innerHTML='';
+  FIELD_THEMES.forEach((t,i)=>{
+    const card=document.createElement('div');
+    card.className='theme-card'+(i===fieldIdx?' active':'');
+    const prev=t.particles.slice(0,3).join(' ');
+    card.innerHTML=`<div class="theme-preview">${prev}</div><div class="tname">${t.name}</div>`;
+    card.addEventListener('click', ()=>{ fieldIdx=i; applyFieldTheme(); renderPanel(); });
+    fieldRow.appendChild(card);
+  });
+  BLOCK_THEMES.forEach((t,i)=>{
+    const card=document.createElement('div');
+    card.className='theme-card'+(i===blockIdx?' active':'');
+    const prev=t.colors.slice(0,4).map(c=>`<span class="sw" style="background:${c}"></span>`).join('');
+    card.innerHTML=`<div class="theme-preview">${prev}</div><div class="tname">${t.name}</div>`;
+    card.addEventListener('click', ()=>{ blockIdx=i; applyBlockTheme(); renderTray(); renderPanel(); });
+    blockRow.appendChild(card);
+  });
+}
+
+function loadBest(){
+  try{ const v = localStorage.getItem('blockpuzzle_best'); if(v) best = parseInt(v,10)||0; }catch(e){}
+  bestEl.textContent = best;
+}
+function saveBest(){ try{ localStorage.setItem('blockpuzzle_best', String(best)); }catch(e){} }
+
+function buildBoard(){
+  boardEl.innerHTML = '';
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const d = document.createElement('div');
+    d.className='cell'; d.dataset.r=r; d.dataset.c=c;
+    d.addEventListener('click', ()=>onCellClick(r,c));
+    d.addEventListener('mouseenter', ()=>hoverPreview(r,c));
+    boardEl.appendChild(d);
+  }
+}
+function renderGrid(){
+  const cells = boardEl.children;
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const el = cells[r*SIZE+c];
+    el.className = 'cell' + (grid[r][c] ? ' filled':'');
+    el.style.backgroundColor = grid[r][c] || '';
+  }
+}
+
+function renderTools(){
+  toolsEl.innerHTML='';
+  const defs = [
+    {key:'bomb', ic:'💣', label:'Бомба'},
+    {key:'row', ic:'➡️', label:'Ряд'},
+    {key:'col', ic:'⬇️', label:'Столбец'},
+    {key:'shuffle', ic:'🔀', label:'Замена'},
+  ];
+  defs.forEach(d=>{
+    const box=document.createElement('div');
+    const n = charges[d.key];
+    box.className='tool'+(n<=0?' disabled':'')+(activeTool===d.key?' active':'');
+    box.innerHTML = `<div class="ic">${d.ic}</div><div class="ct">${d.label} ×${n}</div>`;
+    box.addEventListener('click', ()=>toolClick(d.key));
+    toolsEl.appendChild(box);
+  });
+}
+
+function toolClick(key){
+  if(isOver || charges[key]<=0) return;
+  if(key==='shuffle'){
+    tray.forEach(p=>{ if(!p.used){ const np=randomPiece(); p.shape=np.shape; p.color=np.color; } });
+    charges.shuffle--; renderTray(); renderTools();
+    msgEl.textContent='Фигуры заменены';
+    return;
+  }
+  selectedIdx = null;
+  activeTool = (activeTool===key) ? null : key;
+  renderTools(); renderTray();
+  msgEl.textContent = activeTool ? 'Выбери клетку на поле' : '';
+}
+
+function hoverPreview(r,c){
+  if(isOver || activeTool || selectedIdx==null) return;
+  const shape = tray[selectedIdx].shape;
+  clearPreview();
+  const ok = canPlace(shape, r, c);
+  for(let i=0;i<shape.length;i++)for(let j=0;j<shape[0].length;j++){
+    if(!shape[i][j]) continue;
+    const rr=r+i, cc=c+j;
+    if(rr<0||rr>=SIZE||cc<0||cc>=SIZE) continue;
+    boardEl.children[rr*SIZE+cc].classList.add(ok?'preview':'bad');
+  }
+}
+
+function onCellClick(r,c){
+  if(isOver) return;
+  if(activeTool && activeTool!=='shuffle'){
+    if(charges[activeTool]<=0) return;
+    const targets = [];
+    if(activeTool==='bomb'){
+      for(let i=r-1;i<=r+1;i++)for(let j=c-1;j<=c+1;j++) if(i>=0&&i<SIZE&&j>=0&&j<SIZE) targets.push([i,j]);
+      charges.bomb--;
+    } else if(activeTool==='row'){
+      for(let j=0;j<SIZE;j++) targets.push([r,j]);
+      charges.row--;
+    } else if(activeTool==='col'){
+      for(let i=0;i<SIZE;i++) targets.push([i,c]);
+      charges.col--;
+    }
+    animateClear(targets, ()=>{
+      targets.forEach(([i,j])=> grid[i][j]=0);
+      renderGrid(); renderTools();
+      checkGameOver();
+    });
+    activeTool=null;
+    msgEl.textContent='Поле расчищено';
+    return;
+  }
+  if(selectedIdx!=null) tryPlace(selectedIdx, r, c);
+}
+
+function animateClear(coords, done){
+  const cells = boardEl.children;
+  coords.forEach(([r,c])=>{ if(grid[r][c]) cells[r*SIZE+c].classList.add('clearing'); });
+  setTimeout(done, 300);
+}
+
+function randomPiece(){
+  const shape = SHAPES[Math.floor(Math.random()*SHAPES.length)];
+  const cs = COLORS();
+  const color = cs[Math.floor(Math.random()*cs.length)];
+  return {shape, color, used:false};
+}
+function refillTray(){ tray = [randomPiece(), randomPiece(), randomPiece()]; renderTray(); }
+function renderTray(){
+  trayEl.innerHTML = '';
+  tray.forEach((p,i)=>{
+    const holder = document.createElement('div');
+    holder.className = 'piece' + (p.used?' used':'') + (selectedIdx===i?' selected':'');
+    holder.style.gridTemplateColumns = `repeat(${p.shape[0].length},16px)`;
+    p.shape.flat().forEach(v=>{
+      const pc = document.createElement('div');
+      pc.className = 'pc ' + (v?'on':'off');
+      if(v) pc.style.setProperty('--pcolor', p.color);
+      holder.appendChild(pc);
+    });
+    holder.addEventListener('pointerdown', e=>startDrag(e, i, holder));
+    holder.addEventListener('click', ()=>selectPiece(i));
+    trayEl.appendChild(holder);
+  });
+}
+
+function selectPiece(i){
+  if(isOver || tray[i].used || activeTool) return;
+  selectedIdx = (selectedIdx===i) ? null : i;
+  clearPreview();
+  renderTray();
+}
+
+function buildClone(piece){
+  const clone = document.createElement('div');
+  clone.className='drag-clone';
+  clone.style.gridTemplateColumns = `repeat(${piece.shape[0].length},16px)`;
+  piece.shape.flat().forEach(v=>{
+    const pc = document.createElement('div');
+    pc.className = 'pc ' + (v?'on':'off');
+    if(v) pc.style.setProperty('--pcolor', piece.color);
+    clone.appendChild(pc);
+  });
+  document.body.appendChild(clone);
+  return clone;
+}
+function startDrag(e, idx, el){
+  if(isOver || tray[idx].used || activeTool) return;
+  dragPiece = tray[idx]; dragEl = el;
+  const startX=e.clientX, startY=e.clientY;
+  let moved=false, cloneEl=null;
+  el.setPointerCapture(e.pointerId);
+  const move = ev => {
+    if(Math.abs(ev.clientX-startX)>4 || Math.abs(ev.clientY-startY)>4) moved=true;
+    if(moved){
+      if(!cloneEl){ el.classList.add('dragging'); cloneEl = buildClone(dragPiece); }
+      cloneEl.style.left = (ev.clientX - cloneEl.offsetWidth/2) + 'px';
+      cloneEl.style.top = (ev.clientY - cloneEl.offsetHeight/2) + 'px';
+      dragPreview(ev.clientX, ev.clientY);
+    }
+  };
+  const up = ev => {
+    el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up);
+    el.classList.remove('dragging');
+    if(cloneEl) cloneEl.remove();
+    if(moved){ endDrag(ev.clientX, ev.clientY, idx); }
+    else { dragPiece=null; dragEl=null; }
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+}
+
+function cellFromPoint(x,y){
+  const rect = boardEl.getBoundingClientRect();
+  const cw = rect.width/SIZE, ch = rect.height/SIZE;
+  return {r:Math.floor((y-rect.top)/ch), c:Math.floor((x-rect.left)/cw)};
+}
+function clearPreview(){ [...boardEl.children].forEach(el=>el.classList.remove('preview','bad')); }
+
+function dragPreview(x,y){
+  clearPreview();
+  if(!dragPiece) return;
+  const {r,c} = cellFromPoint(x,y);
+  const shape = dragPiece.shape;
+  const h=shape.length, w=shape[0].length;
+  const r0=r-Math.floor(h/2), c0=c-Math.floor(w/2);
+  const ok = canPlace(shape, r0, c0);
+  for(let i=0;i<h;i++)for(let j=0;j<w;j++){
+    if(!shape[i][j]) continue;
+    const rr=r0+i, cc=c0+j;
+    if(rr<0||rr>=SIZE||cc<0||cc>=SIZE) continue;
+    boardEl.children[rr*SIZE+cc].classList.add(ok?'preview':'bad');
+  }
+}
+function canPlace(shape, r0, c0){
+  for(let i=0;i<shape.length;i++)for(let j=0;j<shape[0].length;j++){
+    if(!shape[i][j]) continue;
+    const rr=r0+i, cc=c0+j;
+    if(rr<0||rr>=SIZE||cc<0||cc>=SIZE) return false;
+    if(grid[rr][cc]) return false;
+  }
+  return true;
+}
+
+function endDrag(x,y,idx){
+  clearPreview();
+  const {r,c} = cellFromPoint(x,y);
+  dragPiece=null; dragEl=null;
+  const shape = tray[idx].shape;
+  const h=shape.length, w=shape[0].length;
+  tryPlace(idx, r-Math.floor(h/2), c-Math.floor(w/2));
+}
+
+function tryPlace(idx, r0, c0){
+  const p = tray[idx];
+  if(!p || p.used) return;
+  clearPreview();
+  const shape=p.shape, h=shape.length, w=shape[0].length;
+  if(!canPlace(shape, r0, c0)){ renderTray(); return; }
+  const placed=[];
+  for(let i=0;i<h;i++)for(let j=0;j<w;j++){ if(shape[i][j]){ grid[r0+i][c0+j]=p.color; placed.push([r0+i,c0+j]); } }
+  score += shape.flat().filter(Boolean).length;
+  tray[idx].used = true;
+  selectedIdx = null;
+  renderGrid();
+  placed.forEach(([rr,cc])=>{
+    const el = boardEl.children[rr*SIZE+cc];
+    el.classList.add('pop');
+    el.addEventListener('animationend', ()=>el.classList.remove('pop'), {once:true});
+  });
+  scoreEl.textContent = score;
+  if(tray.every(t=>t.used)) refillTray(); else renderTray();
+  setTimeout(resolveLines, 80);
+}
+
+function resolveLines(){
+  const fullRows=[], fullCols=[];
+  for(let r=0;r<SIZE;r++) if(grid[r].every(v=>v)) fullRows.push(r);
+  for(let c=0;c<SIZE;c++) if(grid.every(row=>row[c])) fullCols.push(c);
+  const count = fullRows.length + fullCols.length;
+  if(count===0){ checkGameOver(); return; }
+  const targets=[];
+  fullRows.forEach(r=>{ for(let c=0;c<SIZE;c++) targets.push([r,c]); });
+  fullCols.forEach(c=>{ for(let r=0;r<SIZE;r++) if(!fullRows.includes(r)) targets.push([r,c]); });
+  animateClear(targets, ()=>{
+    targets.forEach(([r,c])=> grid[r][c]=0);
+    renderGrid();
+    checkGameOver();
+  });
+  const gained = count*8 + (count>1?count*4:0);
+  score += gained;
+  scoreEl.textContent = score;
+  if(score>best){ best=score; bestEl.textContent=best; saveBest(); }
+  msgEl.textContent = count>1 ? `Комбо! +${gained}` : `Линия! +${gained}`;
+  if(count>=2){
+    const keys=['bomb','row','col','shuffle'];
+    const k = keys[Math.floor(Math.random()*keys.length)];
+    charges[k]++; renderTools();
+  }
+  setTimeout(()=>{ msgEl.textContent=''; }, 1800);
+}
+
+function checkGameOver(){
+  const remaining = tray.filter(t=>!t.used);
+  const anyFits = remaining.some(p=>{
+    for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++) if(canPlace(p.shape,r,c)) return true;
+    return false;
+  });
+  if(remaining.length>0 && !anyFits){
+    isOver = true;
+    activeTool=null; selectedIdx=null;
+    boardEl.classList.add('gameover','shake');
+    trayEl.classList.add('gameover');
+    setTimeout(()=>boardEl.classList.remove('shake'), 500);
+    msgEl.textContent = `Игра окончена — счёт ${score}`;
+    restartBtn.style.display='inline-block';
+  }
+}
+
+restartBtn.addEventListener('click', ()=>{
+  grid = Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  score = 0; scoreEl.textContent = 0;
+  charges = {bomb:1, row:1, col:1, shuffle:1};
+  activeTool=null; selectedIdx=null; isOver=false;
+  msgEl.textContent = '';
+  restartBtn.style.display='none';
+  boardEl.classList.remove('gameover','shake');
+  trayEl.classList.remove('gameover');
+  renderGrid(); renderTools();
+  refillTray();
+});
+
+loadBest();
+applyFieldTheme();
+applyBlockTheme();
+buildBoard();
+renderGrid();
+renderTools();
+refillTray();
+</script>
+</body>
+</html>
